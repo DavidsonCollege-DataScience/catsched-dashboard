@@ -6,6 +6,9 @@
 .RData
 .RDataTmp
 
+# YAML config file
+config.yml
+
 # User-specific files
 .Ruserdata
 
