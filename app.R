@@ -138,7 +138,9 @@ ui <- fluidPage(
           #`Fall 2024`   = "202401",
           #`Spring 2025` = "202402",
           `Fall 2025`   = "202501",
-          `Spring 2026` = "202502"
+          `Spring 2026` = "202502",
+          `Fall 2026`   = "202601",
+          `Spring 2027` = "202602"
         )
       )
     ),
@@ -221,7 +223,7 @@ server <- function(input, output, session) {
     # activeTerm <- "202501"
     
     # Generate dummy class schedule to aid in processing non-standard times
-    dummy_times <- as.list(
+    dummy_times <- as.data.frame(
       tribble(
         ~days,   ~startTime, ~endTime,
         "M,T,W,R,F", "9:30am",   "10:20am"
@@ -255,7 +257,8 @@ server <- function(input, output, session) {
       dummy_times,
       dummy_times
     ) %>%
-    unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_")
+    unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") %>%
+    unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
     
     df_clean <- df %>%
       # select only the columns we need
@@ -279,7 +282,10 @@ server <- function(input, output, session) {
         semester   == activeTerm
       ) %>%
       # split firstNonStandardMeetingTime into separate columns
-      unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") %>% 
+      unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") %>%
+      unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
+    
+    df_clean <- df_clean %>%
       # insert the dummy data frame
       union(df_dummy) %>%
       # generate new column to uniquely identify each section
@@ -327,20 +333,6 @@ server <- function(input, output, session) {
     
     # Process non-standard meeting times
     df_nonstandard2 <- df_clean %>%
-      select(
-        keyDeptCrse,
-        secondNonStandardMeetingTime
-      ) %>%  
-      mutate(
-        secondNonStandardMeetingTime = map(
-          secondNonStandardMeetingTime,
-          ~ ifelse(. == "", NA, .)
-        )) %>%
-      filter(
-        !str_detect(secondNonStandardMeetingTime,"NA")
-      ) %>%
-      unnest_wider(secondNonStandardMeetingTime, names_sep = "_") %>%
-      # split days into separate columns
       mutate(meetDays = str_split(secondNonStandardMeetingTime_days, ",")) %>%
       unnest_wider(meetDays, names_sep = "") %>%
       select(
