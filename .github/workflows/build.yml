@@ -5,12 +5,19 @@ permissions:
   
 on:
   workflow_dispatch:
-    
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'Containerfile'
+      - '**.R'
+      - 'img/*'
+  
 env:
   REGISTRY: ghcr.io
   USERNAME: ${{ github.actor }}
   TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  TARGET: '${{ github.repository_owner }}/crf-dashboard'
+  TARGET: '${{ github.respository }}'
   
 jobs:
   build:
