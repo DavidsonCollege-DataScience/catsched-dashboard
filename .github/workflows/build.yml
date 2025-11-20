@@ -17,7 +17,7 @@ env:
   REGISTRY: ghcr.io
   USERNAME: ${{ github.actor }}
   TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  TARGET: '${{ github.respository }}'
+  TARGET: '${{ github.repository }}'
   
 jobs:
   build:
