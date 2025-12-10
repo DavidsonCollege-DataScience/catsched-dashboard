@@ -135,10 +135,6 @@ ui <- fluidPage(
         "term_filter",
         label = "Academic Term",
         choices = list(
-          #`Fall 2024`   = "202401",
-          #`Spring 2025` = "202402",
-          `Fall 2025`   = "202501",
-          `Spring 2026` = "202502",
           `Fall 2026`   = "202601",
           `Spring 2027` = "202602"
         )
