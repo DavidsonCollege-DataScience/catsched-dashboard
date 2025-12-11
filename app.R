@@ -60,7 +60,7 @@ get_course_data <- function() {
 # Function to calculate department groups
 get_dept_group <- function(department) {
   case_when(
-    department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
+    department %in% c("MAT", "CSC", "DAT", "IDAT") ~ "Mathematics + Computer Science + Data Science",
     department %in% c("PHY", "PBH") ~ "Public Health + Physics",
     department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
     department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
@@ -230,10 +230,11 @@ server <- function(input, output, session) {
     
     activeTerm <- input$term_filter
 
-    df <- get_course_data()
+    df <- as.data.frame(get_course_data()[2]) |>
+      rename_with(~str_remove(., "^data\\."))
     
     # For testing
-    # activeTerm <- "202501"
+    # activeTerm <- "202601"
     
     # Generate dummy class schedule to aid in processing non-standard times
     dummy_times <- as.data.frame(
@@ -263,9 +264,9 @@ server <- function(input, output, session) {
       activeTerm,
       "ZZZ",
       "",
+      "MTWRF 9:30am - 10:20am",
       "",
-      "",
-      "",
+      "MTWRF 9:30am - 10:20am",
       "",
       dummy_times,
       dummy_times
@@ -431,7 +432,8 @@ server <- function(input, output, session) {
       distinct(.keep_all = TRUE) |>
       arrange(keyDeptCrse) |>
       mutate(
-        department = str_sub(keyDeptCrse,0,3)
+        # department = str_sub(keyDeptCrse,0,3)
+        department = str_split(keyDeptCrse, "-", simplify = TRUE)[, 1]
       ) |>
       mutate(deptGroup = get_dept_group(department)) |>
       filter(
