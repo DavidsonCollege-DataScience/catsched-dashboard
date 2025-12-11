@@ -28,8 +28,3 @@ default:
 ## Authors
 
 - Pete Benbow (Dept of Data Science)
-
-## Future plans
-
-- Set up GitHub actions to automatically deploy this dashboard to a production Shiny environment like shinyapps.io or an internal college server, or run it in serverless mode via the `shinylive` package.
-- Convert the dashboard to Quarto
