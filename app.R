@@ -538,11 +538,12 @@ server <- function(input, output, session) {
       ) +
       # Customize the X-axis to show times from 8 AM to 5 PM in ascending order
       scale_x_continuous(
-        breaks = seq(0, 510, by = 60),  # 540 is the number of minutes from 8:00 AM to 5:00 PM
+        breaks = seq(0, 510, by = 60),   # every hour from 8:00 AM (0) to 5:30 PM (510)
         labels = function(x) {
-          hours <- (x + 480) %/% 60
-          minutes <- (x + 480) %% 60
-          sprintf("%02d:%02d", hours, minutes)
+          base_time <- as.POSIXct("2000-01-01 08:00", tz = "UTC")
+          labs <- format(base_time + lubridate::minutes(x), "%I:%M %p")
+          # remove leading zero so "08:00 AM" becomes "8:00 AM"
+          sub("^0", "", labs)
         },
         limits = c(0, 510)
       ) +
