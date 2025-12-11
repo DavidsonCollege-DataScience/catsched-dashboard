@@ -57,6 +57,25 @@ get_course_data <- function() {
   }
 }
 
+# Function to calculate department groups
+get_dept_group <- function(department) {
+  case_when(
+    department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
+    department %in% c("PHY", "PBH") ~ "Public Health + Physics",
+    department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
+    department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
+    department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
+    department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
+    department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
+    department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
+    department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
+    department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
+    department %in% c("GER", "THE") ~ "German Studies + Theatre",
+    department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
+    .default = department
+  )
+}
+
 # Function to calculate stack positions for a single day
 calculate_stack_positions <- function(data) {
   n <- nrow(data)
@@ -193,23 +212,7 @@ server <- function(input, output, session) {
       result$data %>%
         distinct(department) %>%
         filter(department != "UNS") %>%
-        mutate(
-          deptGroup = case_when(
-            department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
-            department %in% c("PHY", "PBH") ~ "Public Health + Physics",
-            department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
-            department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
-            department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
-            department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
-            department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
-            department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
-            department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
-            department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
-            department %in% c("GER", "THE") ~ "German Studies + Theatre",
-            department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
-            .default = department
-          )
-        ) %>%
+        mutate(deptGroup = get_dept_group(department)) %>%
         arrange(deptGroup)
     }
   })
@@ -430,23 +433,7 @@ server <- function(input, output, session) {
       mutate(
         department = str_sub(keyDeptCrse,0,3)
       ) %>%
-      mutate(
-        deptGroup = case_when(
-          department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
-          department %in% c("PHY", "PBH") ~ "Public Health + Physics",
-          department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
-          department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
-          department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
-          department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
-          department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
-          department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
-          department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
-          department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
-          department %in% c("GER", "THE") ~ "German Studies + Theatre",
-          department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
-          .default = department
-        )
-      ) %>%
+      mutate(deptGroup = get_dept_group(department)) %>%
       filter(
         department != "UNS",
         department != "ZZZ"
