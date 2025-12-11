@@ -209,10 +209,10 @@ server <- function(input, output, session) {
       ))
       return(NULL)  # Return NULL when there's an error
     } else {
-      result$data %>%
-        distinct(department) %>%
-        filter(department != "UNS") %>%
-        mutate(deptGroup = get_dept_group(department)) %>%
+      result$data |>
+        distinct(department) |>
+        filter(department != "UNS") |>
+        mutate(deptGroup = get_dept_group(department)) |>
         arrange(deptGroup)
     }
   })
@@ -269,11 +269,11 @@ server <- function(input, output, session) {
       "",
       dummy_times,
       dummy_times
-    ) %>%
-    unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") %>%
+    ) |>
+    unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") |>
     unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
     
-    df_clean <- df %>%
+    df_clean <- df |>
       # select only the columns we need
       select(
         courseNumber,
@@ -288,26 +288,26 @@ server <- function(input, output, session) {
         crossPosts,
         firstNonStandardMeetingTime,
         secondNonStandardMeetingTime
-      ) %>%
+      ) |>
       # remove UNS "unspecified" department code and filter on specific semester
       filter(
         #department != "UNS",
         semester   == activeTerm
-      ) %>%
+      ) |>
       # split firstNonStandardMeetingTime into separate columns
-      unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") %>%
+      unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") |>
       unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
     
-    df_clean <- df_clean %>%
+    df_clean <- df_clean |>
       # insert the dummy data frame
-      union(df_dummy) %>%
+      union(df_dummy) |>
       # generate new column to uniquely identify each section
       unite(
         keyTermDeptCrseSect,
         c("semester","department","courseNumber","sectionNumber"),
         sep    = "-",
         remove = FALSE
-      )%>%
+      )|>
       # generate new column to uniquely identify each course
       unite(
         keyDeptCrse,
@@ -317,25 +317,25 @@ server <- function(input, output, session) {
       )
     
     # Process non-standard meeting times (group 1)
-    df_nonstandard1 <- df_clean %>%
+    df_nonstandard1 <- df_clean |>
       select(
         keyDeptCrse,
         firstNonStandardMeetingTime_days,
         firstNonStandardMeetingTime_startTime,
         firstNonStandardMeetingTime_endTime
-      ) %>%  
+      ) |>  
       filter(
         firstNonStandardMeetingTime_days != ""
-      ) %>%
+      ) |>
       # split days into separate columns
-      mutate(meetDays = str_split(firstNonStandardMeetingTime_days, ",")) %>%
-      unnest_wider(meetDays, names_sep = "")%>%
+      mutate(meetDays = str_split(firstNonStandardMeetingTime_days, ",")) |>
+      unnest_wider(meetDays, names_sep = "")|>
       select(
         keyDeptCrse,
         startTime = firstNonStandardMeetingTime_startTime,
         endTime = firstNonStandardMeetingTime_endTime,
         meetDays1:meetDays5,
-      ) %>%
+      ) |>
       pivot_longer(
         !keyDeptCrse:endTime,
         names_to       ="meetDayNum",
@@ -345,15 +345,15 @@ server <- function(input, output, session) {
     
     
     # Process non-standard meeting times
-    df_nonstandard2 <- df_clean %>%
-      mutate(meetDays = str_split(secondNonStandardMeetingTime_days, ",")) %>%
-      unnest_wider(meetDays, names_sep = "") %>%
+    df_nonstandard2 <- df_clean |>
+      mutate(meetDays = str_split(secondNonStandardMeetingTime_days, ",")) |>
+      unnest_wider(meetDays, names_sep = "") |>
       select(
         keyDeptCrse,
         startTime = secondNonStandardMeetingTime_startTime,
         endTime = secondNonStandardMeetingTime_endTime,
         meetDays1:meetDays5,
-      ) %>%
+      ) |>
       pivot_longer(
         !keyDeptCrse:endTime,
         names_to       ="meetDayNum",
@@ -361,52 +361,52 @@ server <- function(input, output, session) {
         values_drop_na = TRUE
       )
     
-    df_times <- df_clean %>%
+    df_times <- df_clean |>
       # get only the columns we need
       select(
         keyDeptCrse,
         firstMeetingTime,
         secondMeetingTime
-      ) %>%
+      ) |>
       # filter out TBD and blank meeting times
       filter(
         firstMeetingTime != "TBD",
         firstMeetingTime != ""
-      ) %>%
+      ) |>
       # unpivot values
       pivot_longer(
         !keyDeptCrse,
         names_to  =  "firstOrSecond",
         values_to = "meetingTime"
-      ) %>%
+      ) |>
       # remove blank meeting times
       filter(
         meetingTime != ""
-      ) %>%
+      ) |>
       # split meeting times into separate columns for days and times
       separate_wider_delim(
         col      = meetingTime,
         delim    = " ",
         names    = c("meetDays", "meetTimes"),
         too_many = "merge"
-      ) %>%
+      ) |>
       # split times into separate columns for start times and end times
       separate_wider_delim(
         col   = meetTimes,
         delim = " - ",
         names = c("startTime", "endTime")
-      ) %>%
+      ) |>
       # split days into separate columns
-      mutate(meetDays = str_split(meetDays, "")) %>%
-      unnest_wider(meetDays, names_sep = "") %>%
+      mutate(meetDays = str_split(meetDays, "")) |>
+      unnest_wider(meetDays, names_sep = "") |>
       # unpivot again based on days
       pivot_longer(
         meetDays1:meetDays3,
         names_to       =  "meetDayNum",
         values_to      = "dayOfWeek",
         values_drop_na = TRUE
-      ) %>% 
-      bind_rows(df_nonstandard1,df_nonstandard2) %>%
+      ) |> 
+      bind_rows(df_nonstandard1,df_nonstandard2) |>
       mutate(
         dayOfWeek = case_when(
           dayOfWeek == "M" ~ "Mon",
@@ -415,7 +415,7 @@ server <- function(input, output, session) {
           dayOfWeek == "R" ~ "Thu",
           dayOfWeek == "F" ~ "Fri"
         )
-      ) %>%
+      ) |>
       mutate(
         # Convert times to proper datetime objects (using parse_date_time with updated format)
         startTime_parsed = parse_date_time(startTime, "HMp"),
@@ -424,20 +424,20 @@ server <- function(input, output, session) {
         startMinsSince8 = as.numeric(difftime(startTime_parsed, parse_date_time("8:00am", "HMp"), units = "mins")),
         endMinsSince8   = as.numeric(difftime(endTime_parsed, parse_date_time("8:00am", "HMp"), units = "mins")),
         duration        = endMinsSince8 - startMinsSince8
-      ) %>%
+      ) |>
       # Drop intermediate columns
-      select(-startTime_parsed, -endTime_parsed) %>%
+      select(-startTime_parsed, -endTime_parsed) |>
       # get distinct records
-      distinct(.keep_all = TRUE) %>%
-      arrange(keyDeptCrse) %>%
+      distinct(.keep_all = TRUE) |>
+      arrange(keyDeptCrse) |>
       mutate(
         department = str_sub(keyDeptCrse,0,3)
-      ) %>%
-      mutate(deptGroup = get_dept_group(department)) %>%
+      ) |>
+      mutate(deptGroup = get_dept_group(department)) |>
       filter(
         department != "UNS",
         department != "ZZZ"
-      ) %>%
+      ) |>
       select(
         keyDeptCrse,
         deptGroup,
@@ -456,18 +456,18 @@ server <- function(input, output, session) {
     
     # If user chooses all departments, show all; otherwise, filter them
     if (input$department_filter != "All") {
-      df_times <- df_times %>% filter(deptGroup == input$department_filter)
+      df_times <- df_times |> filter(deptGroup == input$department_filter)
     }
     
     # Process dataset to include duration and calculate stack positions
-    classes <- df_times %>%
-      group_by(dayOfWeek) %>%
-      arrange(startMinsSince8, endMinsSince8) %>%
-      mutate(Stack_Pos = calculate_stack_positions(cur_data())) %>%  # Apply custom function
-      ungroup() %>%
-      group_by(dayOfWeek) %>%
-      mutate(Total_Stacks = max(Stack_Pos)) %>%
-      ungroup() %>%
+    classes <- df_times |>
+      group_by(dayOfWeek) |>
+      arrange(startMinsSince8, endMinsSince8) |>
+      mutate(Stack_Pos = calculate_stack_positions(cur_data())) |>  # Apply custom function
+      ungroup() |>
+      group_by(dayOfWeek) |>
+      mutate(Total_Stacks = max(Stack_Pos)) |>
+      ungroup() |>
       # Calculate whether text should be shown based on tile height
       mutate(
         Tile_Height = stack_height / Total_Stacks,  # Calculate tile height
