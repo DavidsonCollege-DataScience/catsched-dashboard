@@ -191,7 +191,7 @@ server <- function(input, output, session) {
           department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
           department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
           department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
-          department %in% c("FRE", "LAS", "ARB") ~ "French and Francophone Studies + Latin American Studies",
+          department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
           department %in% c("GER", "THE") ~ "German Studies + Theatre",
           department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
           .default = department
@@ -427,7 +427,7 @@ server <- function(input, output, session) {
           department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
           department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
           department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
-          department %in% c("FRE", "LAS", "ARB") ~ "French and Francophone Studies + Latin American Studies",
+          department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
           department %in% c("GER", "THE") ~ "German Studies + Theatre",
           department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
           .default = department
