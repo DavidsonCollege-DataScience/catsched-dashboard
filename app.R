@@ -38,19 +38,22 @@ get_course_data <- function() {
     add_headers(Authorization = paste("Bearer", bearer_token))
   )
   
-  # Check if the request was successful
   if (status_code(response) == 200) {
-    # Parse the JSON content
     response_content <- content(response, as = "text", encoding = "UTF-8")
     response_json <- fromJSON(response_content)
     
-    # Convert JSON to a data frame
+    # Check if JSON data is empty or NULL
+    if (is.null(response_json) || length(response_json) == 0 || 
+        (is.character(response_json) && nchar(trimws(response_content)) == 0)) {
+      return(list(success = FALSE, message = "No data available from the API", data = NULL))
+    }
+    
     df <- as.data.frame(response_json)
+    return(list(success = TRUE, data = df))
     
   } else {
-    # Print the error message
     message("Failed to retrieve data. Status code: ", status_code(response))
-    print(content(response, as = "text", encoding = "UTF-8"))
+    return(list(success = FALSE, message = error_msg, data = NULL))
   }
 }
 
@@ -176,28 +179,39 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   df_depts <- reactive({
+    result <- get_course_data()
     
-    get_course_data() %>%
-      distinct(department) %>%
-      filter(department != "UNS") %>%
-      mutate(
-        deptGroup = case_when(
-          department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
-          department %in% c("PHY", "PBH") ~ "Public Health + Physics",
-          department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
-          department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
-          department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
-          department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
-          department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
-          department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
-          department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
-          department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
-          department %in% c("GER", "THE") ~ "German Studies + Theatre",
-          department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
-          .default = department
-        )
-      ) %>%
-      arrange(deptGroup)
+    if (!result$success) {
+      showModal(modalDialog(
+        title     = "Oops, you broke it!",
+        result$message,
+        easyClose = TRUE,
+        footer    = modalButton("OK")
+      ))
+      return(NULL)  # Return NULL when there's an error
+    } else {
+      result$data %>%
+        distinct(department) %>%
+        filter(department != "UNS") %>%
+        mutate(
+          deptGroup = case_when(
+            department %in% c("MAT", "CSC", "DAT") ~ "Mathematics + Computer Science + Data Science",
+            department %in% c("PHY", "PBH") ~ "Public Health + Physics",
+            department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
+            department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
+            department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
+            department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
+            department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
+            department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
+            department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
+            department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
+            department %in% c("GER", "THE") ~ "German Studies + Theatre",
+            department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
+            .default = department
+          )
+        ) %>%
+        arrange(deptGroup)
+    }
   })
   
   # Initialize a reactive value to trigger updates
