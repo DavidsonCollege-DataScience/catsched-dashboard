@@ -1,0 +1,569 @@
+---
+title: "CatSched Dashboard"
+format: 
+  dashboard:
+    theme: materia
+    nav-buttons: [github]
+server: shiny
+---
+
+```{r}
+#| context: setup
+#| include: false
+
+# Load required libraries
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(lubridate)
+library(dplyr)
+library(shiny)
+library(bslib)
+library(markdown)
+
+# Define variables for data pull
+conn_args <- config::get("dataconnection")
+api_url <- conn_args$url
+bearer_token <- conn_args$token
+
+get_course_data <- function() {
+  response <- GET(
+    url = api_url,
+    add_headers(Authorization = paste("Bearer", bearer_token))
+  )
+  
+  if (status_code(response) == 200) {
+    response_content <- content(response, as = "text", encoding = "UTF-8")
+    response_json <- fromJSON(response_content)
+    
+    if (is.null(response_json) || length(response_json) == 0 || 
+        (is.character(response_json) && nchar(trimws(response_content)) == 0)) {
+      return(list(success = FALSE, message = "No data available from the API", data = NULL))
+    }
+    
+    df <- as.data.frame(response_json)
+    return(list(success = TRUE, data = df))
+    
+  } else {
+    message("Failed to retrieve data. Status code: ", status_code(response))
+    return(list(success = FALSE, message = "API Error", data = NULL))
+  }
+}
+
+get_dept_group <- function(department) {
+  case_when(
+    department %in% c("MAT", "CSC", "DAT", "IDAT") ~ "Mathematics + Computer Science + Data Science",
+    department %in% c("PHY", "PBH") ~ "Public Health + Physics",
+    department %in% c("HUM", "ANT") ~ "Humanities + Anthropology",
+    department %in% c("DAN", "PHI") ~ "Dance + Philosophy",
+    department %in% c("CHI", "CIS", "SOU") ~ "Chinese Studies + South Asian Studies + Center for Interdisciplinary Studies",
+    department %in% c("CLA", "AFR", "GRE", "LAT") ~ "Classics + Africana Studies",
+    department %in% c("COM", "GSS") ~ "Communication Studies + Gender and Sexuality Studies",
+    department %in% c("EDU", "RUS") ~ "Educational Studies + Russian Studies",
+    department %in% c("FMS", "DIG", "ARB") ~ "Film, Media, and Digital Studies + Arab Studies",
+    department %in% c("FRE", "LAS") ~ "French and Francophone Studies + Latin American Studies",
+    department %in% c("GER", "THE") ~ "German Studies + Theatre",
+    department %in% c("MUS", "LIT") ~ "Music + Global Literary Theory",
+    .default = department
+  )
+}
+
+calculate_stack_positions <- function(data) {
+  n <- nrow(data)
+  stack_positions <- integer(n)
+  active_end_times <- numeric()
+  
+  for (i in seq_len(n)) {
+    start_time <- data$startMinsSince8[i]
+    end_time <- data$endMinsSince8[i]
+    
+    available_stack <- which(!active_end_times | active_end_times <= start_time)
+    if (length(available_stack) > 0) {
+      stack_positions[i] <- available_stack[1]
+      active_end_times[available_stack[1]] <- end_time
+    } else {
+      stack_positions[i] <- length(active_end_times) + 1
+      active_end_times <- c(active_end_times, end_time)
+    }
+  }
+  stack_positions
+}
+
+# Define constants
+stack_height <- 0.8
+text_height_threshold <- 0.05
+
+center_stack_y <- function(day_numeric, stack_pos, total_stacks) {
+  day_numeric + (stack_pos - (total_stacks + 1) / 2) * (stack_height / total_stacks)
+}
+
+tile_height <- function(total_stacks) {
+  stack_height / total_stacks
+}
+
+gray_tiles <- data.frame(
+  dayOfWeek = c("Tue", "Thu"),
+  startMinsSince8 = c(185, 185),
+  endMinsSince8 = c(245, 245),
+  fill = "Break"
+)
+
+gray_tiles$dayOfWeek <- factor(gray_tiles$dayOfWeek, levels = rev(c("Mon", "Tue", "Wed", "Thu", "Fri")))
+
+
+
+result <- get_course_data()
+  
+if (!result$success) {
+  showNotification(result$message, type = "error")
+  return(NULL)
+} else {
+  df <- as.data.frame(result$data) |>
+    rename_with(~str_remove(., "^data\\.")) |>
+    filter(department != "UNS") |>
+    mutate(deptGroup = get_dept_group(department))
+}
+
+df_clean <- df |>
+  select(
+    courseNumber,
+    sectionNumber,
+    sectionTitle,
+    semester,
+    department,
+    firstAssignedRoom,
+    firstMeetingTime,
+    secondAssignedRoom,
+    secondMeetingTime,
+    crossPosts,
+    firstNonStandardMeetingTime,
+    secondNonStandardMeetingTime
+  ) |>
+  unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") |>
+  unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
+  
+# Generate dummy class schedule
+dummy_times <- as.data.frame(
+  tribble(
+    ~days,   ~startTime, ~endTime,
+    "M,T,W,R,F", "9:30am",   "10:20am"
+  )
+)
+
+  # Generate dummy data frame
+df_dummy <- tribble(
+  ~ courseNumber,
+  ~ sectionNumber,
+  ~ sectionTitle,
+  ~ semester,
+  ~ department,
+  ~ firstAssignedRoom,
+  ~ firstMeetingTime,
+  ~ secondAssignedRoom,
+  ~ secondMeetingTime,
+  ~ crossPosts,
+  ~ firstNonStandardMeetingTime,
+  ~ secondNonStandardMeetingTime,
+  "000",
+  "0",
+  "Dummy",
+  "209901",
+  "ZZZ",
+  "",
+  "MTWRF 9:30am - 10:20am",
+  "",
+  "MTWRF 9:30am - 10:20am",
+  "",
+  dummy_times,
+  dummy_times
+) |>
+unnest_wider(col = firstNonStandardMeetingTime, names_sep = "_") |>
+unnest_wider(col = secondNonStandardMeetingTime, names_sep = "_")
+  
+df_union <- df_clean |>
+  union(df_dummy) |>
+  unite(
+    keyTermDeptCrseSect,
+    c("semester","department","courseNumber","sectionNumber"),
+    sep    = "-",
+    remove = FALSE
+  ) |>
+  unite(
+    keyDeptCrse,
+    c("department","courseNumber"),
+    sep    = "-",
+    remove = FALSE
+  ) |>
+  mutate(deptGroup = get_dept_group(department))
+
+# Process non-standard meeting times (group 1)
+df_nonstandard1 <- df_union |>
+  select(
+    semester,
+    keyDeptCrse,
+    firstNonStandardMeetingTime_days,
+    firstNonStandardMeetingTime_startTime,
+    firstNonStandardMeetingTime_endTime
+  ) |>  
+  filter(firstNonStandardMeetingTime_days != "") |>
+  mutate(meetDays = str_split(firstNonStandardMeetingTime_days, ",")) |>
+  unnest_wider(meetDays, names_sep = "") |>
+  select(
+    semester,
+    keyDeptCrse,
+    startTime = firstNonStandardMeetingTime_startTime,
+    endTime = firstNonStandardMeetingTime_endTime,
+    meetDays1:meetDays5,
+  ) |>
+  pivot_longer(
+    !semester:endTime,
+    names_to       ="meetDayNum",
+    values_to      = "dayOfWeek",
+    values_drop_na = TRUE
+  )
+
+# Process non-standard meeting times (group 2)
+df_nonstandard2 <- df_union |>
+  mutate(meetDays = str_split(secondNonStandardMeetingTime_days, ",")) |>
+  unnest_wider(meetDays, names_sep = "") |>
+  select(
+    semester,
+    keyDeptCrse,
+    startTime = secondNonStandardMeetingTime_startTime,
+    endTime = secondNonStandardMeetingTime_endTime,
+    meetDays1:meetDays5,
+  ) |>
+  pivot_longer(
+    !semester:endTime,
+    names_to       ="meetDayNum",
+    values_to      = "dayOfWeek",
+    values_drop_na = TRUE
+  )
+
+df_times <- df_union |>
+  select(semester, keyDeptCrse, firstMeetingTime, secondMeetingTime) |>
+  filter(
+    firstMeetingTime != "TBD",
+    firstMeetingTime != ""
+  ) |>
+  pivot_longer(
+    !semester:keyDeptCrse,
+    names_to  =  "firstOrSecond",
+    values_to = "meetingTime"
+  ) |>
+  filter(meetingTime != "") |>
+  separate_wider_delim(
+    col      = meetingTime,
+    delim    = " ",
+    names    = c("meetDays", "meetTimes"),
+    too_many = "merge"
+  ) |>
+  separate_wider_delim(
+    col   = meetTimes,
+    delim = " - ",
+    names = c("startTime", "endTime")
+  ) |>
+  mutate(meetDays = str_split(meetDays, "")) |>
+  unnest_wider(meetDays, names_sep = "") |>
+  pivot_longer(
+    meetDays1:meetDays5,
+    names_to       =  "meetDayNum",
+    values_to      = "dayOfWeek",
+    values_drop_na = TRUE
+  ) |> 
+  bind_rows(df_nonstandard1, df_nonstandard2) |>
+  mutate(
+    dayOfWeek = case_when(
+      dayOfWeek == "M" ~ "Mon",
+      dayOfWeek == "T" ~ "Tue",
+      dayOfWeek == "W" ~ "Wed",
+      dayOfWeek == "R" ~ "Thu",
+      dayOfWeek == "F" ~ "Fri"
+    )
+  ) |>
+  mutate(
+    startTime_parsed = parse_date_time(startTime, "HMp"),
+    endTime_parsed   = parse_date_time(endTime, "HMp"),
+    startMinsSince8 = as.numeric(difftime(startTime_parsed, parse_date_time("8:00am", "HMp"), units = "mins")),
+    endMinsSince8   = as.numeric(difftime(endTime_parsed, parse_date_time("8:00am", "HMp"), units = "mins")),
+    duration        = endMinsSince8 - startMinsSince8
+  ) |>
+  select(-startTime_parsed, -endTime_parsed) |>
+  distinct(.keep_all = TRUE) |>
+  arrange(keyDeptCrse) |>
+  mutate(
+    department = str_split(keyDeptCrse, "-", simplify = TRUE)[, 1]
+  ) |>
+  mutate(deptGroup = get_dept_group(department)) |>
+  filter(
+    department != "UNS",
+    department != "ZZZ"
+  ) |>
+  select(
+    semester,
+    keyDeptCrse,
+    deptGroup,
+    department,
+    dayOfWeek,
+    startTime,
+    endTime,
+    duration,
+    startMinsSince8,
+    endMinsSince8
+  )
+
+df_final <- df_union |>
+  filter(
+    department != "UNS",
+    department != "ZZZ"
+  ) |>
+  mutate(
+    `First Non-Standard Time` = str_c(
+      str_c(
+        firstNonStandardMeetingTime_days, 
+        firstNonStandardMeetingTime_startTime,
+        " "
+      ),
+    firstNonStandardMeetingTime_endTime,
+    "-"
+    ), 
+    `Second Non-Standard Time` = str_c(
+      str_c(
+        secondNonStandardMeetingTime_days, 
+        secondNonStandardMeetingTime_startTime,
+        " "
+      ),
+    secondNonStandardMeetingTime_endTime,
+    "-"
+    )
+  ) |>
+  select(
+    semester,
+    deptGroup,
+    Course        = keyDeptCrse,
+    Section       = sectionNumber,
+    Title         = sectionTitle,
+    `Cross Post`  = crossPosts,
+    `First Room`  = firstAssignedRoom,
+    `First Time`  = firstMeetingTime,
+    `Second Room` = secondAssignedRoom,
+    `Second Time` = secondMeetingTime,
+    `First Non-Standard Time`,
+    `Second Non-Standard Time`
+  )
+
+rm(df_nonstandard1)
+rm(df_nonstandard2)
+rm(dummy_times)
+rm(df_dummy)
+```
+
+```{r}
+#| context: server
+
+# Reactive data for departments
+df_depts <- reactive({
+  df_union |>
+    filter(
+      department != "UNS",
+      department != "ZZZ"
+    ) |>
+    arrange(deptGroup) |>
+    distinct(deptGroup)
+})
+
+get_plot_data <- reactive({
+  req(input$department_filter)
+  
+  activeTerm <- input$term_filter
+
+  df_plot <- df_times |>
+    filter(semester == activeTerm)
+  
+  if (input$department_filter != "All") {
+    df_plot <- df_plot |> filter(deptGroup == input$department_filter)
+  }
+  
+  # Process dataset to include duration and calculate stack positions
+  df_plot <- df_plot |> 
+    group_by(dayOfWeek) |>
+    arrange(startMinsSince8, endMinsSince8) |>
+    mutate(Stack_Pos = calculate_stack_positions(pick(everything()))) |>
+    ungroup() |>
+    group_by(dayOfWeek) |>
+    mutate(Total_Stacks = max(Stack_Pos)) |>
+    ungroup() |>
+    mutate(
+      Tile_Height = stack_height / Total_Stacks,
+      Show_Text = Tile_Height > text_height_threshold
+    )
+  
+  df_plot$dayOfWeek <- factor(df_plot$dayOfWeek, levels = rev(c("Mon", "Tue", "Wed", "Thu", "Fri")))
+  df_plot
+})
+
+get_table_data <- reactive({
+  req(input$department_filter)
+  
+  activeTerm <- input$term_filter
+  
+  df_table <- df_final |>
+    filter(semester == activeTerm)
+  
+  if (input$department_filter != "All") {
+    df_table <- df_table |> filter(deptGroup == input$department_filter)
+  }
+  
+  df_table |> select(!semester:deptGroup)
+})
+
+# Update department choices when refresh is clicked
+observeEvent(c(input$refresh), {
+  updateSelectizeInput(session, "department_filter",
+                       choices = c("All", df_depts()$deptGroup))
+}, ignoreNULL = FALSE)
+```
+
+# Dashboard
+
+## {.sidebar width="450px"}
+
+```{r}
+selectizeInput(
+  "term_filter",
+  label = "Academic Term",
+  choices = list(
+    `Fall 2026`   = "202601",
+    `Spring 2027` = "202602"
+  )
+)
+```
+
+```{r}
+selectizeInput(
+  "department_filter", 
+  label    = "Department Grouping",
+  choices  = c("All"),
+  selected = "All"
+)
+```
+
+```{r}
+actionButton("refresh", "Refresh", class = "btn-primary", width = "100%")
+```
+
+## Column {.tabset}
+
+```{r}
+#| title: Class Schedules
+
+plotOutput("schedViz", height = "800px")
+```
+
+```{r}
+#| title: Data
+
+tableOutput("schedTbl")
+```
+
+```{r}
+#| context: server
+
+output$schedViz <- renderPlot({
+  ggplot(get_plot_data()) +
+    geom_tile(
+      aes(
+        y = center_stack_y(as.numeric(dayOfWeek), Stack_Pos, Total_Stacks),
+        x = (startMinsSince8 + endMinsSince8) / 2,
+        width = endMinsSince8 - startMinsSince8,
+        height = tile_height(Total_Stacks)
+      ),
+      color = "black", fill = "#03dac5",
+      show.legend = FALSE
+    ) +
+    geom_tile(
+      data = gray_tiles,
+      aes(
+        x = (startMinsSince8 + endMinsSince8) / 2,
+        y = as.numeric(dayOfWeek),
+        width = endMinsSince8 - startMinsSince8,
+        height = 0.8
+      ),
+      fill = "gray", alpha = 0.5
+    ) +
+    geom_text(
+      aes(
+        x = (startMinsSince8 + endMinsSince8) / 2,
+        y = center_stack_y(as.numeric(dayOfWeek), Stack_Pos, Total_Stacks),
+        label = ifelse(Show_Text, keyDeptCrse, NA)
+      ),
+      hjust = 0.5,
+      size = 5, 
+      color = "black",
+      na.rm = TRUE
+    ) +
+    scale_x_continuous(
+      breaks = seq(0, 510, by = 60),
+      labels = function(x) {
+        base_time <- as.POSIXct("2000-01-01 08:00", tz = "UTC")
+        labs <- format(base_time + lubridate::minutes(x), "%I:%M %p")
+        sub("^0", "", labs)
+      },
+      limits = c(0, 510)
+    ) +
+    geom_text(
+      data = gray_tiles,
+      aes(
+        x = (startMinsSince8 + endMinsSince8) / 2,
+        y = as.numeric(dayOfWeek),
+        label = "Common\nhour"
+      ),
+      size = 5, color = "black", fontface = "bold"
+    ) +
+    scale_y_continuous(
+      breaks = 1:5,
+      labels = rev(c("Mon", "Tue", "Wed", "Thu", "Fri")),
+      expand = c(0, 0)
+    ) +
+    scale_size_continuous(range = c(5, 30)) +
+    labs(
+      x = "Time",
+      y = "Day of the Week"
+    ) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(
+        size = 14,
+        face = "bold",
+        color = "black"
+      ),
+      axis.text.y = element_text(
+        angle = 0, 
+        hjust = 1, 
+        size  = 14,
+        face  = "bold",
+        color = "black"
+      ),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      panel.grid.major.y = element_blank(),
+      plot.margin = unit(c(1, 1, 1, 1), "lines")
+      # plot.margin = unit(c(0.1, 0.1, 0.1, 0.1), "npc")
+    ) +
+    geom_hline(yintercept = seq(0.5, 5.5, by = 1), color = "grey70")
+})
+
+output$schedTbl <- renderTable({
+  get_table_data()
+})
+
+```
+
+# User Guide
+
+```{r}
+#| title: User Guide
+#| echo: false
+
+includeMarkdown("dashboardUserGuide.md")
+```
